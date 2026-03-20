@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DJ Visual Art Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/addons/p5.sound.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+    cursor: crosshair;
+  }
+  canvas { display: block; }
+
+  /* ── Floating Control Panel (Glassmorphism) ── */
+  #controlPanel {
+    position: fixed;
+    top: 0;
+    right: -320px;
+    width: 320px;
+    height: 100vh;
+    z-index: 1000;
+    transition: right 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    background: rgba(10, 10, 30, 0.55);
+    backdrop-filter: blur(24px) saturate(1.6);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: -8px 0 40px rgba(0, 0, 0, 0.6);
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    overflow-y: auto;
+  }
+  #controlPanel.visible { right: 0; }
+
+  #controlPanel h2 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.85);
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  #controlPanel .subtitle {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.35);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .ctrl-group label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+  }
+  .ctrl-group input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.1);
+    outline: none;
+  }
+  .ctrl-group input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #00ffc8;
+    box-shadow: 0 0 10px rgba(0,255,200,0.5);
+    cursor: pointer;
+  }
+
+  .mode-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .mode-btn {
+    padding: 12px 16px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-align: left;
+  }
+  .mode-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+  }
+  .mode-btn.active {
+    border-color: #00ffc8;
+    color: #00ffc8;
+    background: rgba(0,255,200,0.08);
+    box-shadow: 0 0 20px rgba(0,255,200,0.1);
+  }
+  .mode-btn .mode-desc {
+    font-size: 10px;
+    font-weight: 400;
+    color: rgba(255,255,255,0.3);
+    margin-top: 3px;
+  }
+
+  .action-btn {
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  #uploadBtn {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.7);
+    border: 1px dashed rgba(255,255,255,0.2);
+  }
+  #uploadBtn:hover {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+  }
+  #micBtn {
+    background: rgba(0,200,255,0.12);
+    color: #00c8ff;
+    border: 1px solid rgba(0,200,255,0.25);
+  }
+  #micBtn:hover { background: rgba(0,200,255,0.2); }
+  #micBtn.active {
+    background: rgba(0,200,255,0.25);
+    box-shadow: 0 0 20px rgba(0,200,255,0.2);
+  }
+
+  #recordBtn {
+    background: rgba(255,50,80,0.12);
+    color: #ff3250;
+    border: 1px solid rgba(255,50,80,0.25);
+  }
+  #recordBtn:hover { background: rgba(255,50,80,0.2); }
+  #recordBtn.recording {
+    background: rgba(255,50,80,0.3);
+    animation: pulse-rec 1s infinite;
+    box-shadow: 0 0 20px rgba(255,50,80,0.3);
+  }
+  @keyframes pulse-rec {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+  }
+
+  /* ── Hover trigger zone ── */
+  #hoverZone {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 30px;
+    height: 100vh;
+    z-index: 999;
+  }
+
+  /* ── Hidden file input ── */
+  #audioInput { display: none; }
+
+  /* ── Center Prompt ── */
+  #startPrompt {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 500;
+    pointer-events: none;
+    transition: opacity 0.8s;
+  }
+  #startPrompt h1 {
+    font-size: 28px;
+    font-weight: 300;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 6px;
+    text-transform: uppercase;
+  }
+  #startPrompt p {
+    font-size: 12px;
+    color: rgba(255,255,255,0.12);
+    letter-spacing: 3px;
+    margin-top: 12px;
+  }
+  #startPrompt.hidden { opacity: 0; }
+
+  /* ── Now Playing ── */
+  #nowPlaying {
+    position: fixed;
+    bottom: 20px;
+    left: 24px;
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.25);
+    z-index: 500;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+
+<div id="startPrompt">
+  <h1>DJ Visualizer</h1>
+  <p>Upload audio or enable mic → hover right edge for controls</p>
+</div>
+
+<div id="nowPlaying"></div>
+
+<div id="hoverZone"></div>
+
+<div id="controlPanel">
+  <h2>DJ Visualizer</h2>
+  <div class="subtitle">Audio-Reactive Visual Engine</div>
+
+  <div class="divider"></div>
+
+  <div class="ctrl-group">
+    <label>Sensitivity — <span id="sensVal">50</span>%</label>
+    <input type="range" id="sensitivity" min="1" max="100" value="50">
+  </div>
+
+  <div class="ctrl-group">
+    <label>Speed — <span id="speedVal">50</span>%</label>
+    <input type="range" id="speed" min="1" max="100" value="50">
+  </div>
+
+  <div class="ctrl-group">
+    <label>Density — <span id="densityVal">50</span>%</label>
+    <input type="range" id="density" min="1" max="100" value="50">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="ctrl-group">
+    <label>Visual Mode</label>
+    <div class="mode-buttons">
+      <button class="mode-btn active" data-mode="cyberpunk">
+        ◆ Cyberpunk
+        <div class="mode-desc">Neon glitch · Scanlines · Deep navy &amp; teal</div>
+      </button>
+      <button class="mode-btn" data-mode="geometric">
+        ◇ Geometric Pattern
+        <div class="mode-desc">Symmetric polygons · Minimal vector lines</div>
+      </button>
+      <button class="mode-btn" data-mode="gritty">
+        ◈ Gritty Texture
+        <div class="mode-desc">Film grain · Analog noise · High contrast</div>
+      </button>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <button class="action-btn" id="uploadBtn">📂 Upload Audio File</button>
+  <button class="action-btn" id="micBtn">🎤 Microphone Input</button>
+
+  <div class="divider"></div>
+
+  <button class="action-btn" id="recordBtn">⏺ Start Recording</button>
+
+  <input type="file" id="audioInput" accept="audio/*">
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  GLOBALS
+// ═══════════════════════════════════════════════════
+let fft, audioSource, mic, sound;
+let currentMode = 'cyberpunk';
+let sensitivity = 0.5, speed = 0.5, densityParam = 0.5;
+let audioReady = false;
+let particles = [];
+let recorder, recordedChunks = [], isRecording = false;
+let canvasStream;
+let time = 0;
+let smoothedSpectrum = [];
+let smoothedBass = 0, smoothedMid = 0, smoothedHigh = 0, smoothedLevel = 0;
+const SMOOTH = 0.15;
+
+// ═══════════════════════════════════════════════════
+//  p5.js SETUP
+// ═══════════════════════════════════════════════════
+function setup() {
+  const cnv = createCanvas(windowWidth, windowHeight);
+  cnv.parent(document.body);
+  pixelDensity(1);
+  colorMode(HSB, 360, 100, 100, 100);
+  noStroke();
+
+  fft = new p5.FFT(0.85, 512);
+  for (let i = 0; i < 512; i++) smoothedSpectrum[i] = 0;
+
+  // init particles
+  initParticles();
+
+  // setup recording stream
+  setupRecording(cnv.elt);
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+}
+
+// ═══════════════════════════════════════════════════
+//  p5.js DRAW LOOP
+// ═══════════════════════════════════════════════════
+function draw() {
+  const dt = deltaTime * 0.001;
+  time += dt * (0.3 + speed * 1.2);
+
+  // ── Audio Analysis ──
+  let spectrum = fft.analyze();
+  let waveform = fft.waveform();
+  for (let i = 0; i < spectrum.length; i++) {
+    smoothedSpectrum[i] = lerp(smoothedSpectrum[i], spectrum[i], SMOOTH + sensitivity * 0.15);
+  }
+
+  let bassRaw = fft.getEnergy("bass") / 255;
+  let midRaw = fft.getEnergy("mid") / 255;
+  let highRaw = fft.getEnergy("treble") / 255;
+  let levelRaw = (bassRaw + midRaw + highRaw) / 3;
+
+  let sens = 0.5 + sensitivity * 2.5;
+  smoothedBass = lerp(smoothedBass, bassRaw * sens, SMOOTH);
+  smoothedMid = lerp(smoothedMid, midRaw * sens, SMOOTH);
+  smoothedHigh = lerp(smoothedHigh, highRaw * sens, SMOOTH);
+  smoothedLevel = lerp(smoothedLevel, levelRaw * sens, SMOOTH);
+
+  // ── Render Mode ──
+  if (currentMode === 'cyberpunk') drawCyberpunk(dt, waveform);
+  else if (currentMode === 'geometric') drawGeometric(dt, waveform);
+  else if (currentMode === 'gritty') drawGritty(dt, waveform);
+}
+
+// ═══════════════════════════════════════════════════
+//  MODE 1 — CYBERPUNK
+// ═══════════════════════════════════════════════════
+function drawCyberpunk(dt, waveform) {
+  // Deep navy background with fade trail
+  colorMode(RGB, 255);
+  background(8, 10, 30, 35);
+  colorMode(HSB, 360, 100, 100, 100);
+
+  const cx = width / 2, cy = height / 2;
+  const bass = smoothedBass, mid = smoothedMid, hi = smoothedHigh;
+
+  // ── Radial energy burst ──
+  push();
+  translate(cx, cy);
+  for (let i = 0; i < 128; i++) {
+    let val = smoothedSpectrum[i] / 255 * (0.5 + sensitivity * 2);
+    let angle = map(i, 0, 128, 0, TWO_PI);
+    let r1 = 80 + bass * 100;
+    let r2 = r1 + val * (200 + mid * 150);
+    let hue = (180 + i * 1.2 + time * 20) % 360;
+    let sw = 1 + val * 4;
+    stroke(hue, 80, 60 + val * 40, 50 + val * 50);
+    strokeWeight(sw);
+    let x1 = cos(angle) * r1, y1 = sin(angle) * r1;
+    let x2 = cos(angle) * r2, y2 = sin(angle) * r2;
+    line(x1, y1, x2, y2);
+  }
+  pop();
+
+  // ── Horizontal scanlines ──
+  noStroke();
+  for (let y = 0; y < height; y += 3) {
+    let alpha = 8 + sin(y * 0.5 + time * 4) * 5;
+    fill(0, 0, 0, alpha);
+    rect(0, y, width, 1);
+  }
+
+  // ── Neon waveform ──
+  push();
+  strokeWeight(2 + bass * 3);
+  noFill();
+  for (let pass = 0; pass < 2; pass++) {
+    let hue = pass === 0 ? 320 : 170; // neon pink / teal
+    let offset = pass === 0 ? -2 : 2;
+    stroke(hue, 90, 90, 60 + mid * 30);
+    beginShape();
+    for (let i = 0; i < waveform.length; i += 2) {
+      let x = map(i, 0, waveform.length, 0, width);
+      let y = cy + waveform[i] * (150 + bass * 200) + offset;
+      vertex(x, y);
+    }
+    endShape();
+  }
+  pop();
+
+  // ── Particles ──
+  let pCount = floor(40 + densityParam * 120);
+  while (particles.length < pCount) particles.push(createParticle());
+  while (particles.length > pCount) particles.pop();
+
+  for (let p of particles) {
+    p.x += p.vx * (0.5 + speed * 2 + bass * 3) * dt * 60;
+    p.y += p.vy * (0.5 + speed * 2 + mid * 2) * dt * 60;
+    p.life -= dt * (0.3 + speed * 0.4);
+    if (p.life <= 0 || p.x < -50 || p.x > width + 50 || p.y < -50 || p.y > height + 50) {
+      Object.assign(p, createParticle());
+    }
+    let sz = p.size * (1 + bass * 2);
+    let alpha = p.life * 80;
+    let hue = (p.hue + time * 15) % 360;
+    noStroke();
+    fill(hue, 80, 80, alpha);
+    ellipse(p.x, p.y, sz, sz);
+    // glow
+    fill(hue, 80, 90, alpha * 0.3);
+    ellipse(p.x, p.y, sz * 2.5, sz * 2.5);
+  }
+
+  // ── Glitch blocks ──
+  if (bass > 0.5) {
+    let glitchCount = floor(bass * 8);
+    for (let g = 0; g < glitchCount; g++) {
+      let gx = random(width);
+      let gy = random(height);
+      let gw = random(40, 200);
+      let gh = random(2, 12);
+      colorMode(RGB, 255);
+      let c = random() > 0.5 ? color(0, 255, 200, 40) : color(255, 50, 120, 40);
+      fill(c);
+      noStroke();
+      rect(gx, gy, gw, gh);
+      colorMode(HSB, 360, 100, 100, 100);
+    }
+  }
+
+  // ── Center circle ──
+  push();
+  translate(cx, cy);
+  let cSize = 60 + smoothedLevel * 120;
+  noFill();
+  strokeWeight(2 + bass * 4);
+  stroke(175, 80, 80, 40 + smoothedLevel * 40);
+  ellipse(0, 0, cSize, cSize);
+  stroke(320, 80, 80, 30 + smoothedLevel * 30);
+  ellipse(0, 0, cSize * 1.3, cSize * 1.3);
+  pop();
+}
+
+// ═══════════════════════════════════════════════════
+//  MODE 2 — GEOMETRIC PATTERN
+// ═══════════════════════════════════════════════════
+function drawGeometric(dt, waveform) {
+  colorMode(RGB, 255);
+  background(5, 5, 12, 40);
+  colorMode(HSB, 360, 100, 100, 100);
+
+  const cx = width / 2, cy = height / 2;
+  const bass = smoothedBass, mid = smoothedMid, hi = smoothedHigh;
+  const level = smoothedLevel;
+
+  // ── Rotating polygon rings ──
+  push();
+  translate(cx, cy);
+  let layers = 5 + floor(densityParam * 8);
+  for (let l = 0; l < layers; l++) {
+    let sides = 3 + (l % 6);
+    let radius = 50 + l * (40 + bass * 30) + smoothedSpectrum[l * 10] * 0.8;
+    let rot = time * (0.2 + speed * 0.6) * (l % 2 === 0 ? 1 : -1) + l * 0.3;
+    let hue = (200 + l * 25 + time * 10) % 360;
+    let sw = 1 + mid * 3;
+    let alpha = 30 + level * 50 - l * 3;
+
+    noFill();
+    stroke(hue, 50, 70, max(alpha, 5));
+    strokeWeight(sw);
+
+    push();
+    rotate(rot);
+    beginShape();
+    for (let i = 0; i <= sides; i++) {
+      let a = (TWO_PI / sides) * i;
+      let r = radius + sin(time * 2 + i) * (10 + hi * 30);
+      vertex(cos(a) * r, sin(a) * r);
+    }
+    endShape(CLOSE);
+    pop();
+
+    // ── Inner vertex connectors ──
+    if (l > 0 && l < layers - 1) {
+      let innerR = 50 + (l - 1) * (40 + bass * 30);
+      stroke(hue, 30, 60, alpha * 0.3);
+      strokeWeight(0.5);
+      for (let i = 0; i < sides; i++) {
+        let a = (TWO_PI / sides) * i + rot;
+        let a2 = (TWO_PI / sides) * i + time * (0.2 + speed * 0.6) * ((l - 1) % 2 === 0 ? 1 : -1) + (l - 1) * 0.3;
+        line(cos(a) * radius, sin(a) * radius, cos(a2) * innerR, sin(a2) * innerR);
+      }
+    }
+  }
+  pop();
+
+  // ── Symmetrical line burst ──
+  push();
+  translate(cx, cy);
+  let symCount = 6 + floor(densityParam * 10);
+  for (let s = 0; s < symCount; s++) {
+    let baseAngle = (TWO_PI / symCount) * s + time * 0.1;
+    let len = 100 + smoothedSpectrum[s * 8] * 1.5 + bass * 150;
+    let sw = 0.5 + hi * 2;
+    let hue = (120 + s * 20) % 360;
+    stroke(hue, 40, 80, 20 + mid * 40);
+    strokeWeight(sw);
+    let x1 = cos(baseAngle) * 20;
+    let y1 = sin(baseAngle) * 20;
+    let x2 = cos(baseAngle) * len;
+    let y2 = sin(baseAngle) * len;
+    line(x1, y1, x2, y2);
+  }
+  pop();
+
+  // ── Orbiting dots ──
+  push();
+  translate(cx, cy);
+  let dotCount = floor(20 + densityParam * 60);
+  for (let d = 0; d < dotCount; d++) {
+    let a = (TWO_PI / dotCount) * d + time * (0.5 + speed);
+    let r = 120 + sin(d * 0.7 + time) * 60 + smoothedSpectrum[d % 256] * 0.6;
+    let sz = 2 + hi * 6;
+    let hue = (180 + d * 3) % 360;
+    noStroke();
+    fill(hue, 50, 90, 30 + level * 50);
+    ellipse(cos(a) * r, sin(a) * r, sz, sz);
+  }
+  pop();
+
+  // ── Center sacred geometry ──
+  push();
+  translate(cx, cy);
+  noFill();
+  stroke(0, 0, 100, 15 + level * 25);
+  strokeWeight(1);
+  let cRadius = 40 + bass * 60;
+  ellipse(0, 0, cRadius * 2, cRadius * 2);
+  for (let i = 0; i < 6; i++) {
+    let a = (TWO_PI / 6) * i + time * 0.15;
+    ellipse(cos(a) * cRadius, sin(a) * cRadius, cRadius * 2, cRadius * 2);
+  }
+  pop();
+}
+
+// ═══════════════════════════════════════════════════
+//  MODE 3 — GRITTY TEXTURE
+// ═══════════════════════════════════════════════════
+function drawGritty(dt, waveform) {
+  colorMode(RGB, 255);
+  background(10, 10, 10, 50);
+
+  const cx = width / 2, cy = height / 2;
+  const bass = smoothedBass, mid = smoothedMid, hi = smoothedHigh;
+  const level = smoothedLevel;
+
+  // ── Film grain noise ──
+  loadPixels();
+  let d = pixelDensity();
+  let total = 4 * (width * d) * (height * d);
+  let grainIntensity = 15 + densityParam * 25;
+  for (let i = 0; i < total; i += 4 * floor(3 - densityParam * 2 + 1)) {
+    let noiseVal = (random() - 0.5) * grainIntensity;
+    pixels[i] = constrain(pixels[i] + noiseVal, 0, 255);
+    pixels[i + 1] = constrain(pixels[i + 1] + noiseVal, 0, 255);
+    pixels[i + 2] = constrain(pixels[i + 2] + noiseVal, 0, 255);
+  }
+  updatePixels();
+
+  // ── Aggressive waveform ──
+  stroke(255, 50 + level * 180);
+  strokeWeight(1.5 + bass * 5);
+  noFill();
+  beginShape();
+  for (let i = 0; i < waveform.length; i++) {
+    let x = map(i, 0, waveform.length, 0, width);
+    let distort = bass > 0.4 ? random(-5, 5) * bass : 0;
+    let y = cy + waveform[i] * (200 + bass * 300) + distort;
+    vertex(x, y);
+  }
+  endShape();
+
+  // ── Spectrum bars — brutal ──
+  let barCount = floor(32 + densityParam * 64);
+  let barW = width / barCount;
+  noStroke();
+  for (let i = 0; i < barCount; i++) {
+    let idx = floor(map(i, 0, barCount, 0, 256));
+    let val = smoothedSpectrum[idx] / 255 * (0.5 + sensitivity * 2);
+    let h = val * (height * 0.5);
+    let bright = 40 + val * 215;
+    fill(bright, bright * 0.95, bright * 0.9, 60 + val * 140);
+    rect(i * barW, height - h, barW - 1, h);
+    // mirror top
+    fill(bright, bright * 0.95, bright * 0.9, 20 + val * 60);
+    rect(i * barW, 0, barW - 1, h * 0.4);
+  }
+
+  // ── Concentric distortion rings ──
+  noFill();
+  for (let r = 0; r < 8; r++) {
+    let radius = 40 + r * 50 + bass * 80;
+    let sw = 0.5 + mid * 3;
+    let alpha = 20 + level * 40 - r * 4;
+    let bright = 200 + hi * 55;
+    stroke(bright, bright, bright, max(alpha, 3));
+    strokeWeight(sw);
+    push();
+    translate(cx, cy);
+    beginShape();
+    for (let a = 0; a <= TWO_PI; a += 0.05) {
+      let nOff = noise(cos(a) * 2 + time, sin(a) * 2 + time, r * 0.5) * 40 * (1 + bass);
+      let x = cos(a) * (radius + nOff);
+      let y = sin(a) * (radius + nOff);
+      vertex(x, y);
+    }
+    endShape(CLOSE);
+    pop();
+  }
+
+  // ── Shattering particles ──
+  let pCount = floor(20 + densityParam * 80);
+  while (particles.length < pCount) particles.push(createParticle());
+  while (particles.length > pCount) particles.pop();
+
+  for (let p of particles) {
+    let dx = p.x - cx, dy = p.y - cy;
+    let dist = sqrt(dx * dx + dy * dy);
+    let pushForce = bass * 3;
+    if (dist > 0) {
+      p.vx += (dx / dist) * pushForce * dt;
+      p.vy += (dy / dist) * pushForce * dt;
+    }
+    p.x += p.vx * (0.5 + speed * 2) * dt * 60;
+    p.y += p.vy * (0.5 + speed * 2) * dt * 60;
+    p.life -= dt * (0.2 + speed * 0.5);
+    if (p.life <= 0 || p.x < -50 || p.x > width + 50 || p.y < -50 || p.y > height + 50) {
+      Object.assign(p, createParticle());
+    }
+    let sz = p.size * (0.5 + mid);
+    let bright = 150 + hi * 105;
+    let alpha = p.life * 200;
+    noStroke();
+    fill(bright, bright, bright, alpha);
+    // random shapes — squares and lines
+    if (p.shape === 0) {
+      push();
+      translate(p.x, p.y);
+      rotate(time + p.hue);
+      rectMode(CENTER);
+      rect(0, 0, sz, sz);
+      pop();
+    } else {
+      ellipse(p.x, p.y, sz * 0.8, sz * 0.8);
+    }
+  }
+
+  // ── Vignette ──
+  colorMode(RGB, 255);
+  noStroke();
+  for (let i = 0; i < 60; i++) {
+    let alpha = map(i, 0, 60, 120, 0);
+    fill(0, 0, 0, alpha);
+    // top
+    rect(0, i * 4, width, 4);
+    // bottom
+    rect(0, height - i * 4 - 4, width, 4);
+    // left
+    rect(i * 4, 0, 4, height);
+    // right
+    rect(width - i * 4 - 4, 0, 4, height);
+  }
+
+  // ── Analog horizontal interference ──
+  if (bass > 0.45) {
+    for (let i = 0; i < floor(bass * 15); i++) {
+      let y = random(height);
+      let h = random(1, 4);
+      fill(255, 255, 255, random(10, 40));
+      rect(0, y, width, h);
+    }
+  }
+
+  colorMode(HSB, 360, 100, 100, 100);
+}
+
+// ═══════════════════════════════════════════════════
+//  PARTICLE SYSTEM
+// ═══════════════════════════════════════════════════
+function createParticle() {
+  return {
+    x: random(width),
+    y: random(height),
+    vx: random(-1, 1),
+    vy: random(-1, 1),
+    size: random(2, 8),
+    life: random(0.5, 1),
+    hue: random(360),
+    shape: floor(random(2))
+  };
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < 80; i++) {
+    particles.push(createParticle());
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  RECORDING — MediaRecorder → MP4/WebM
+// ═══════════════════════════════════════════════════
+function setupRecording(canvasEl) {
+  canvasStream = canvasEl.captureStream(30);
+}
+
+function toggleRecording() {
+  if (isRecording) {
+    recorder.stop();
+    isRecording = false;
+    document.getElementById('recordBtn').textContent = '⏺ Start Recording';
+    document.getElementById('recordBtn').classList.remove('recording');
+  } else {
+    recordedChunks = [];
+    // Prefer webm (wide browser support), fall back as needed
+    let mimeType = 'video/webm;codecs=vp9';
+    if (!MediaRecorder.isTypeSupported(mimeType)) {
+      if (MediaRecorder.isTypeSupported('video/webm')) {
+        mimeType = 'video/webm';
+      } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+        mimeType = 'video/mp4';
+      }
+    }
+
+    // Merge audio into the recording stream if available
+    let combinedStream = canvasStream;
+    try {
+      const audioCtx = getAudioContext();
+      const dest = audioCtx.createMediaStreamDestination();
+      // try to connect current audio source to destination
+      if (sound && sound.isPlaying && sound.isPlaying()) {
+        // p5.Sound internal output
+        p5.soundOut.output.connect(dest);
+      } else if (mic && mic.enabled) {
+        mic.output.connect(dest);
+      }
+      const audioTracks = dest.stream.getAudioTracks();
+      if (audioTracks.length > 0) {
+        combinedStream = new MediaStream([
+          ...canvasStream.getVideoTracks(),
+          ...audioTracks
+        ]);
+      }
+    } catch (e) { /* proceed without audio */ }
+
+    recorder = new MediaRecorder(combinedStream, {
+      mimeType: mimeType,
+      videoBitsPerSecond: 5000000
+    });
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    recorder.onstop = () => {
+      let ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(recordedChunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dj-visual-${Date.now()}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+    recorder.start(100);
+    isRecording = true;
+    document.getElementById('recordBtn').textContent = '⏹ Stop & Save';
+    document.getElementById('recordBtn').classList.add('recording');
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  UI INTERACTION
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  const panel = document.getElementById('controlPanel');
+  const hoverZone = document.getElementById('hoverZone');
+
+  // Show/hide panel on hover
+  hoverZone.addEventListener('mouseenter', () => {
+    panel.classList.add('visible');
+  });
+  panel.addEventListener('mouseleave', (e) => {
+    // Only hide if mouse truly left panel area
+    const rect = panel.getBoundingClientRect();
+    if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+      panel.classList.remove('visible');
+    }
+  });
+
+  // ── Sliders ──
+  document.getElementById('sensitivity').addEventListener('input', (e) => {
+    sensitivity = e.target.value / 100;
+    document.getElementById('sensVal').textContent = e.target.value;
+  });
+  document.getElementById('speed').addEventListener('input', (e) => {
+    speed = e.target.value / 100;
+    document.getElementById('speedVal').textContent = e.target.value;
+  });
+  document.getElementById('density').addEventListener('input', (e) => {
+    densityParam = e.target.value / 100;
+    document.getElementById('densityVal').textContent = e.target.value;
+  });
+
+  // ── Mode buttons ──
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentMode = btn.dataset.mode;
+    });
+  });
+
+  // ── Upload Audio ──
+  document.getElementById('uploadBtn').addEventListener('click', () => {
+    document.getElementById('audioInput').click();
+  });
+
+  document.getElementById('audioInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Stop existing sources
+    if (sound && sound.isPlaying && sound.isPlaying()) sound.stop();
+    if (mic && mic.enabled) { mic.stop(); mic.disconnect(); }
+
+    const url = URL.createObjectURL(file);
+    sound = loadSound(url, () => {
+      sound.play();
+      fft.setInput(sound);
+      audioReady = true;
+      document.getElementById('startPrompt').classList.add('hidden');
+      document.getElementById('nowPlaying').textContent = '♫ ' + file.name;
+      document.getElementById('micBtn').classList.remove('active');
+    });
+  });
+
+  // ── Microphone ──
+  document.getElementById('micBtn').addEventListener('click', () => {
+    const micBtn = document.getElementById('micBtn');
+    if (mic && mic.enabled) {
+      mic.stop();
+      mic.disconnect();
+      mic = null;
+      micBtn.classList.remove('active');
+      micBtn.textContent = '🎤 Microphone Input';
+      document.getElementById('nowPlaying').textContent = '';
+      return;
+    }
+
+    // Stop file audio
+    if (sound && sound.isPlaying && sound.isPlaying()) sound.stop();
+
+    userStartAudio().then(() => {
+      mic = new p5.AudioIn();
+      mic.start(() => {
+        fft.setInput(mic);
+        audioReady = true;
+        micBtn.classList.add('active');
+        micBtn.textContent = '🎤 Mic Active — Click to Stop';
+        document.getElementById('startPrompt').classList.add('hidden');
+        document.getElementById('nowPlaying').textContent = '🎙 Live Microphone';
+      });
+    });
+  });
+
+  // ── Record ──
+  document.getElementById('recordBtn').addEventListener('click', () => {
+    toggleRecording();
+  });
+});
+</script>
+</body>
+</html>
